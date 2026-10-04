@@ -63,7 +63,24 @@ export class Player {
   ) {
     this.stop();
     const generation = this.generation;
-    this.context ??= new AudioContext();
+    // iOS otherwise treats Web Audio as ambient audio and mutes it with the
+    // ring/silent switch. Request media playback within the user gesture.
+    const session = (
+      navigator as Navigator & {
+        audioSession?: { type: string };
+      }
+    ).audioSession;
+    if (session) {
+      try {
+        session.type = "playback";
+      } catch {
+        // Unsupported session settings must not prevent normal Web Audio.
+      }
+    }
+    if (!this.context || this.context.state === "closed") {
+      this.context = new AudioContext();
+      this.samples.clear();
+    }
     await this.context.resume();
     if (generation !== this.generation) return;
     const ctx = this.context;
