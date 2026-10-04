@@ -167,3 +167,75 @@ test("all chord and scale spellings render; desktop reference is usable", async 
   await page.screenshot({ path: "test-results/desktop.png", fullPage: true });
   expect(errors).toEqual([]);
 });
+
+test("guitar chord has staggered attacks, pitched string samples and audible sustain", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const Native = window.AudioContext;
+    const sources: { buffer: AudioBufferSourceNode; at: number }[] = [];
+    (window as unknown as { stringSources: typeof sources }).stringSources =
+      sources;
+    window.AudioContext = class extends Native {
+      createBufferSource() {
+        const source = super.createBufferSource();
+        const start = source.start.bind(source);
+        source.start = (at = 0) => {
+          sources.push({ buffer: source, at });
+          start(at);
+        };
+        return source;
+      }
+    };
+  });
+  await page.goto("./#view=chords&root=C&chord=maj");
+  await page.getByRole("button", { name: "▶ 和音で聴く" }).click();
+  const sound = await page.evaluate(() => {
+    const sources = (
+      window as unknown as {
+        stringSources: { buffer: AudioBufferSourceNode; at: number }[];
+      }
+    ).stringSources;
+    return sources.map(({ buffer: source, at }, index) => {
+      const buffer = source.buffer!;
+      const samples = buffer.getChannelData(0);
+      const frequency = 440 * 2 ** (([48, 52, 55][index] - 69) / 12);
+      let real = 0,
+        imaginary = 0,
+        peak = 0,
+        tail = 0;
+      const begin = Math.floor(buffer.sampleRate * 0.1);
+      const end = Math.floor(buffer.sampleRate * 0.3);
+      for (let i = 0; i < samples.length; i++) {
+        peak = Math.max(peak, Math.abs(samples[i]));
+        if (i >= begin && i < end) {
+          const phase = (2 * Math.PI * frequency * i) / buffer.sampleRate;
+          real += samples[i] * Math.cos(phase);
+          imaginary += samples[i] * Math.sin(phase);
+        }
+        if (i >= buffer.sampleRate && i < buffer.sampleRate * 1.1)
+          tail += samples[i] ** 2;
+      }
+      return {
+        at,
+        peak,
+        fundamental: (2 * Math.hypot(real, imaginary)) / (end - begin),
+        tail,
+      };
+    });
+  });
+  expect(sound).toHaveLength(3);
+  expect(sound[1].at - sound[0].at).toBeCloseTo(0.014, 5);
+  expect(sound[2].at - sound[1].at).toBeCloseTo(0.014, 5);
+  for (const voice of sound) {
+    expect(voice.peak).toBeLessThanOrEqual(1.000001);
+    expect(voice.fundamental).toBeGreaterThan(0.3);
+    expect(voice.tail).toBeGreaterThan(1);
+  }
+  await page.waitForTimeout(1000);
+  await expect(page.locator(".playing-state")).toHaveText("再生中");
+  await expect(page.locator(".playing-state")).toHaveText("クリックして試聴", {
+    timeout: 4000,
+  });
+  await expect(page.locator(".tone-row.sounding")).toHaveCount(0);
+});
