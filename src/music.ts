@@ -4,6 +4,8 @@ export type Formula = {
   label: string;
   degrees: string[];
   description: string;
+  group?: string;
+  modeDegree?: number;
 };
 export const roots = [
   "C",
@@ -91,28 +93,60 @@ export const chords: Formula[] = [
     description:
       "短3度を3つ重ねます。減7度は長7度より2半音低く、理論上は♭♭7と表します。",
   },
+  {
+    id: "augMaj7",
+    label: "メジャー7th ♯5",
+    degrees: ["1", "3", "♯5", "7"],
+    description:
+      "オーギュメント三和音に長7度を加えます。ハーモニック／メロディックマイナーの第3音上にも現れます。",
+  },
+];
+export const chordSuffix: Record<string, string> = {
+  maj: "",
+  min: "m",
+  dim: "dim",
+  aug: "aug",
+  maj7: "maj7",
+  "7": "7",
+  m7: "m7",
+  mMaj7: "m(maj7)",
+  m7b5: "m7♭5",
+  dim7: "dim7",
+  augMaj7: "maj7♯5",
+};
+export const scaleGroups = [
+  "メジャー系のモード",
+  "マイナー系のモード",
+  "その他のマイナー",
+  "ペンタトニック／ブルース",
 ];
 export const scales: Formula[] = [
   {
     id: "major",
-    label: "メジャー",
+    label: "メジャー（イオニアン）",
+    group: scaleGroups[0],
+    modeDegree: 1,
     degrees: ["1", "2", "3", "4", "5", "6", "7"],
     description: "全・全・半・全・全・全・半。3–4度と7–8度が半音です。",
   },
   {
     id: "natural",
-    label: "ナチュラルマイナー",
+    label: "ナチュラルマイナー（エオリアン）",
+    group: scaleGroups[1],
+    modeDegree: 6,
     degrees: ["1", "2", "♭3", "4", "5", "♭6", "♭7"],
     description: "自然短音階。メジャーに対して3・6・7度が半音低くなります。",
   },
   {
     id: "harmonic",
+    group: scaleGroups[2],
     label: "ハーモニックマイナー",
     degrees: ["1", "2", "♭3", "4", "5", "♭6", "7"],
     description: "自然短音階の7度を半音上げます。♭6–7の間は3半音です。",
   },
   {
     id: "melodic",
+    group: scaleGroups[2],
     label: "メロディックマイナー",
     degrees: ["1", "2", "♭3", "4", "5", "6", "7"],
     description:
@@ -120,22 +154,70 @@ export const scales: Formula[] = [
   },
   {
     id: "majorPent",
+    group: scaleGroups[3],
     label: "メジャーペンタトニック",
     degrees: ["1", "2", "3", "5", "6"],
     description: "メジャースケールから4・7度を除いた5音のスケールです。",
   },
   {
     id: "minorPent",
+    group: scaleGroups[3],
     label: "マイナーペンタトニック",
     degrees: ["1", "♭3", "4", "5", "♭7"],
     description: "ルート・短3度・4度・5度・短7度からなる5音のスケールです。",
   },
   {
     id: "blues",
+    group: scaleGroups[3],
     label: "ブルース",
     degrees: ["1", "♭3", "4", "♭5", "5", "♭7"],
     description:
       "マイナーペンタトニックに♭5を加えた6音。4–♭5–5の動きを聴いてみましょう。",
+  },
+  {
+    id: "dorian",
+    label: "ドリアン",
+    group: scaleGroups[1],
+    modeDegree: 2,
+    degrees: ["1", "2", "♭3", "4", "5", "6", "♭7"],
+    description:
+      "ナチュラルマイナーの♭6を半音上げたモード。短3度と長6度の組み合わせが特徴です。",
+  },
+  {
+    id: "phrygian",
+    label: "フリジアン",
+    group: scaleGroups[1],
+    modeDegree: 3,
+    degrees: ["1", "♭2", "♭3", "4", "5", "♭6", "♭7"],
+    description:
+      "ナチュラルマイナーの2度を半音下げたモード。ルートと♭2の半音に注目しましょう。",
+  },
+  {
+    id: "lydian",
+    label: "リディアン",
+    group: scaleGroups[0],
+    modeDegree: 4,
+    degrees: ["1", "2", "3", "♯4", "5", "6", "7"],
+    description:
+      "メジャーの4度を半音上げたモード。ルートと♯4の距離が特徴です。",
+  },
+  {
+    id: "mixolydian",
+    label: "ミクソリディアン",
+    group: scaleGroups[0],
+    modeDegree: 5,
+    degrees: ["1", "2", "3", "4", "5", "6", "♭7"],
+    description:
+      "メジャーの7度を半音下げたモード。長3度と短7度の組み合わせを聴きましょう。",
+  },
+  {
+    id: "locrian",
+    label: "ロクリアン",
+    group: scaleGroups[1],
+    modeDegree: 7,
+    degrees: ["1", "♭2", "♭3", "4", "♭5", "♭6", "♭7"],
+    description:
+      "ナチュラルマイナーの2・5度を半音下げたモード。♭2と♭5が特徴で、主音上に減三和音ができます。",
   },
 ];
 const letters = ["C", "D", "E", "F", "G", "A", "B"];
@@ -220,23 +302,45 @@ export function scalePath(
   down: boolean,
   classic: boolean,
 ) {
-  const degrees =
-    formula.id === "melodic" && classic && down
-      ? scales[1].degrees
-      : formula.degrees;
+  const degrees = displayedScale(formula, down, classic).degrees;
   const result = tones(root, [...degrees, "8"]);
   return down ? result.reverse() : result;
 }
-export function diatonic(root: string, seventh: boolean) {
-  const base = tones(root, scales[0].degrees);
-  return base.map((t, i) => ({
-    root: t.name,
-    formula: chords.find(
-      (c) =>
-        c.id ===
-        (seventh
-          ? ["maj7", "m7", "m7", "maj7", "7", "m7", "m7b5"]
-          : ["maj", "min", "min", "maj", "maj", "min", "dim"])[i],
-    )!,
+export function displayedScale(
+  formula: Formula,
+  down: boolean,
+  classic: boolean,
+) {
+  return formula.id === "melodic" && classic && down ? scales[1] : formula;
+}
+export function parentMajor(root: string, formula: Formula) {
+  if (!formula.modeDegree) return undefined;
+  return spell(root, formula.degrees[(8 - formula.modeDegree) % 7]);
+}
+export function compareTones(a: Tone[], b: Tone[]) {
+  return a.map((t) => ({
+    ...t,
+    common: b.some((other) => mod(other.midi) === mod(t.midi)),
   }));
+}
+export function diatonic(
+  root: string,
+  seventh: boolean,
+  formula: Formula = scales[0],
+) {
+  if (formula.degrees.length !== 7) return [];
+  const base = tones(root, formula.degrees);
+  return base.map((t, i) => {
+    const stacked = Array.from({ length: seventh ? 4 : 3 }, (_, j) => {
+      const index = i + j * 2;
+      return base[index % 7].midi + 12 * Math.floor(index / 7) - t.midi;
+    });
+    const chord = chords.find(
+      (c) =>
+        c.degrees.length === stacked.length &&
+        c.degrees.every((d, j) => interval(d) === stacked[j]),
+    );
+    if (!chord) throw new Error("Unsupported diatonic chord");
+    return { root: t.name, formula: chord };
+  });
 }

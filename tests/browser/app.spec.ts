@@ -144,6 +144,7 @@ test("all chord and scale spellings render; desktop reference is usable", async 
       "mMaj7",
       "m7b5",
       "dim7",
+      "augMaj7",
     ]) {
       await page.getByLabel("CHORD / コード").selectOption(chord);
       await expect(page.locator(".staff-scroll svg")).toBeVisible();
@@ -158,6 +159,11 @@ test("all chord and scale spellings render; desktop reference is usable", async 
     "majorPent",
     "minorPent",
     "blues",
+    "dorian",
+    "phrygian",
+    "lydian",
+    "mixolydian",
+    "locrian",
   ]) {
     await page.getByLabel("SCALE / スケール").selectOption(scale);
     await expect(page.locator(".staff-scroll svg")).toBeVisible();
@@ -238,4 +244,149 @@ test("guitar chord has staggered attacks, pitched string samples and audible sus
     timeout: 4000,
   });
   await expect(page.locator(".tone-row.sounding")).toHaveCount(0);
+});
+
+test("mode comparison, parent links and comparison bookmark restoration", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("./#view=scales&root=C&scale=dorian");
+  await expect(page.getByLabel("SCALE / スケール")).toHaveValue("dorian");
+  await expect(page.locator(".parent-scale")).toContainText("B♭ メジャー");
+  await page.getByLabel("比較する", { exact: true }).check();
+  await page.getByLabel("比較対象 B").selectOption("natural");
+  const cards = page.locator(".comparison-card");
+  await expect(cards.nth(0).locator(".unique")).toHaveText("A6Aのみ");
+  await expect(cards.nth(1).locator(".unique")).toHaveText("A♭♭6Bのみ");
+  await page.getByRole("button", { name: "▶ Bを聴く", exact: true }).click();
+  await expect(page.locator(".playing-state")).toHaveText("再生中");
+  await page.getByRole("button", { name: "停止", exact: true }).click();
+  await expect(page.locator(".tone-row.sounding")).toHaveCount(0);
+  await page.getByRole("button", { name: "Bの指板" }).click();
+  await expect(
+    page
+      .locator(".comparison-panel .fretboard")
+      .getByRole("button", { name: "1弦 4フレット A♭4", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "↘ 下行", exact: true }).click();
+  await page.getByLabel("七の和音", { exact: true }).uncheck();
+  await page.locator(".harmonies button").first().click();
+  const url = page.url();
+  await page.reload();
+  expect(page.url()).toBe(url);
+  await expect(page.getByLabel("比較対象 B")).toHaveValue("natural");
+  await expect(page.getByLabel("七の和音", { exact: true })).not.toBeChecked();
+  await expect(page.locator(".harmonies button").first()).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await expect(page.locator(".direction-label")).toContainText("下行");
+  await page.getByRole("button", { name: "↗ 上行", exact: true }).click();
+  await expect(page.locator(".direction-label")).toContainText("上行");
+  await page.locator(".parent-scale a").click();
+  await expect(page.getByLabel("ROOT / 主音")).toHaveValue("B♭");
+  await expect(page.getByLabel("SCALE / スケール")).toHaveValue("major");
+  await page.goto("./#view=scales&root=G♭&scale=mixolydian");
+  await expect(page.locator(".parent-scale a")).toContainText(
+    "C♭ メジャー（同じ音高のBで表示）",
+  );
+  await page.locator(".parent-scale a").click();
+  await expect(page.getByLabel("ROOT / 主音")).toHaveValue("B");
+  expect(errors).toEqual([]);
+});
+
+test("minor harmony, melodic comparison direction and seven-note boundary", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("./#view=scales&root=A&scale=harmonic");
+  await expect(page.locator(".harmonies")).toContainText("Cmaj7♯5");
+  await expect(page.locator(".harmonies")).toContainText("E7");
+  await expect(page.locator(".harmonies")).toContainText("G♯dim7");
+  await page.locator(".harmonies button").nth(2).click();
+  await expect(page.locator(".tone-panel")).toContainText("Cmaj7♯5 の構成音");
+  await expect(page.locator(".tone-panel")).toContainText("G♯");
+  await expect(page.locator(".tone-row.sounding")).toHaveCount(4);
+  await page.getByRole("button", { name: "停止", exact: true }).click();
+  await page.locator(".harmonies button").nth(2).click();
+  await expect(page.locator(".tone-row.sounding")).toHaveCount(4);
+  await expect(page.locator(".harmonies button").nth(2)).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+  await page.getByRole("button", { name: "重ね表示を解除" }).click();
+  await expect(page.locator(".tone-row.sounding")).toHaveCount(0);
+  await expect(page.locator(".harmonies button.selected")).toHaveCount(0);
+  await page.getByLabel("SCALE / スケール").selectOption("natural");
+  await expect(page.locator(".tone-row.sounding")).toHaveCount(0);
+  await expect(page.locator(".harmonies button.selected")).toHaveCount(0);
+  await page.getByLabel("比較する", { exact: true }).check();
+  await page.getByLabel("比較対象 B").selectOption("melodic");
+  await expect(page.getByLabel("下行の扱い")).toBeVisible();
+  await page.getByRole("button", { name: "↘ 下行", exact: true }).click();
+  await expect(page.locator(".comparison-tone.unique")).toHaveCount(0);
+  await page.getByLabel("下行の扱い").selectOption("jazz");
+  await expect(page.locator(".comparison-card").nth(1)).toContainText("F♯");
+  await expect(page.locator(".comparison-card").nth(1)).toContainText("G♯");
+  await page.getByLabel("SCALE / スケール").selectOption("melodic");
+  await expect(page.locator(".harmonies button").nth(4)).toContainText("E7");
+  await page.getByLabel("下行の扱い").selectOption("classic");
+  await expect(page.locator(".harmonies button").nth(4)).toContainText("Em7");
+  await page.getByLabel("SCALE / スケール").selectOption("minorPent");
+  await expect(page.locator(".harmonies")).toHaveCount(0);
+  await expect(page.getByLabel("照合するコード")).toBeVisible();
+  expect(errors).toEqual([]);
+});
+
+test("expanded modes and harmonies render with accidentals and mobile comparison stays within viewport", async ({
+  page,
+}) => {
+  const errors: string[] = [];
+  page.on("pageerror", (e) => errors.push(e.message));
+  await page.goto("./#view=scales");
+  for (const root of ["C♯", "G♭", "B"]) {
+    await page.getByLabel("ROOT / 主音").selectOption(root);
+    for (const scale of [
+      "dorian",
+      "phrygian",
+      "lydian",
+      "mixolydian",
+      "locrian",
+      "harmonic",
+      "melodic",
+    ]) {
+      await page.getByLabel("SCALE / スケール").selectOption(scale);
+      await expect(page.locator(".harmonies button")).toHaveCount(7);
+      for (let i = 0; i < 7; i++) {
+        await page.locator(".harmonies button").nth(i).click();
+        await expect(page.locator(".tone-row")).toHaveCount(4);
+        await expect(
+          page.locator(".notation-panel .staff-scroll svg"),
+        ).toBeVisible();
+      }
+    }
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("./#view=scales&root=C&scale=dorian&compare=natural");
+  await expect(page.locator(".comparison-card")).toHaveCount(2);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.locator(".comparison-card").nth(1).locator(".unique").focus();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".playing-state")).toHaveText("再生中");
+  await page.screenshot({
+    path: "test-results/comparison-mobile.png",
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1440, height: 1100 });
+  await page.screenshot({
+    path: "test-results/comparison-desktop.png",
+    fullPage: true,
+  });
+  expect(errors).toEqual([]);
 });

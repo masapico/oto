@@ -15,8 +15,15 @@ import {
   interval,
   tuning,
   type Tone,
+  chordSuffix as suffix,
+  displayedScale as effectiveScale,
+  parentMajor,
+  pc,
 } from "./music";
 import { Player } from "./audio";
+import ScaleOptions from "./ScaleOptions";
+import ScaleComparison from "./ScaleComparison";
+import ScaleHarmony from "./ScaleHarmony";
 import { readState, stateHash, type State, type Mode } from "./state";
 import Staff from "./Staff";
 import Fretboard from "./Fretboard";
@@ -26,18 +33,6 @@ const tabs: { id: Mode; num: string; label: string; english: string }[] = [
   { id: "scales", num: "03", label: "スケール", english: "SCALE EXPLORER" },
   { id: "quiz", num: "04", label: "理解の確認", english: "QUICK PRACTICE" },
 ];
-const suffix: Record<string, string> = {
-  maj: "",
-  min: "m",
-  dim: "dim",
-  aug: "aug",
-  maj7: "maj7",
-  "7": "7",
-  m7: "m7",
-  mMaj7: "m(maj7)",
-  m7b5: "m7♭5",
-  dim7: "dim7",
-};
 export default function App() {
   const [state, setState] = useState<State>(readState);
   const [selected, setSelected] = useState<Tone>({
@@ -46,7 +41,7 @@ export default function App() {
     degree: "1",
   });
   const [inspecting, setInspecting] = useState(false);
-  const [descending, setDescending] = useState(false);
+  const descending = state.descending;
   const [active, setActive] = useState<number[]>([]);
   const [playing, setPlaying] = useState(false);
   const [error, setError] = useState("");
@@ -56,8 +51,8 @@ export default function App() {
   const [degrees, setDegrees] = useState(true);
   const [colored, setColored] = useState(true);
   const [solfege, setSolfege] = useState(false);
-  const [overlay, setOverlay] = useState(-1);
-  const [sevenths, setSevenths] = useState(true);
+  const overlay = state.harmony;
+  const sevenths = state.sevenths;
   const [quizType, setQuizType] = useState("name");
   const [question, setQuestion] = useState(0);
   const [answer, setAnswer] = useState<string | null>(null);
@@ -69,19 +64,26 @@ export default function App() {
   }, []);
   const patch = (change: Partial<State>) => {
     stop();
-    setState((s) => ({ ...s, ...change }));
-    setOverlay(-1);
+    const contextChanged = [
+      "root",
+      "scale",
+      "classic",
+      "descending",
+      "mode",
+    ].some((key) => key in change);
+    setState((s) => ({
+      ...s,
+      ...change,
+      ...(contextChanged ? { harmony: 7 } : {}),
+    }));
     setInspecting(false);
-    setDescending(false);
     setAnswer(null);
   };
   useEffect(() => {
     const listener = () => {
       stop();
       setState(readState());
-      setOverlay(-1);
       setInspecting(false);
-      setDescending(false);
       setAnswer(null);
     };
     window.addEventListener("hashchange", listener);
@@ -146,15 +148,17 @@ export default function App() {
   const chord = chords.find((c) => c.id === state.chord)!;
   const scale = scales.find((s) => s.id === state.scale)!;
   const chordTones = invert(tones(state.root, chord.degrees), state.inversion);
-  const displayedScale =
-    state.scale === "melodic" && state.classic && descending
-      ? scales[1]
-      : scale;
+  const displayedScale = effectiveScale(scale, descending, state.classic);
+  const parent = parentMajor(state.root, scale);
+  const parentLinkRoot =
+    parent &&
+    (roots.includes(parent)
+      ? parent
+      : noteName(pc(parent), parent.includes("♭")));
   const scaleTones = tones(state.root, displayedScale.degrees);
   const scaleSequence = scalePath(state.root, scale, descending, state.classic);
-  const harmonies = diatonic(state.root, sevenths);
-  const overlayChord =
-    overlay >= 0 && state.scale === "major" ? harmonies[overlay] : undefined;
+  const harmonies = diatonic(state.root, sevenths, displayedScale);
+  const overlayChord = state.mode === "scales" ? harmonies[overlay] : undefined;
   const overlayTones = overlayChord
     ? tones(overlayChord.root, overlayChord.formula.degrees)
     : [];
@@ -327,14 +331,11 @@ export default function App() {
                     value={state.scale}
                     onChange={(e) => patch({ scale: e.target.value })}
                   >
-                    {scales.map((s) => (
-                      <option value={s.id} key={s.id}>
-                        {s.label}
-                      </option>
-                    ))}
+                    <ScaleOptions />
                   </select>
                 </label>
-                {state.scale === "melodic" && (
+                {(state.scale === "melodic" ||
+                  state.compareScale === "melodic") && (
                   <label>
                     下行の扱い
                     <select
@@ -557,8 +558,7 @@ export default function App() {
                       <button
                         className="primary"
                         onClick={() => {
-                          setDescending(false);
-                          setOverlay(-1);
+                          patch({ descending: false });
                           play(
                             scalePath(state.root, scale, false, state.classic),
                           );
@@ -568,8 +568,7 @@ export default function App() {
                       </button>
                       <button
                         onClick={() => {
-                          setDescending(true);
-                          setOverlay(-1);
+                          patch({ descending: true });
                           play(
                             scalePath(state.root, scale, true, state.classic),
                           );
@@ -769,103 +768,34 @@ export default function App() {
               </div>
             </section>
             {state.mode === "scales" && (
-              <section className="panel harmony-panel">
-                <div className="section-top">
-                  <div>
-                    <p className="eyebrow">SCALE → CHORD</p>
-                    <h3>スケールとコードの関係</h3>
-                  </div>
-                  {state.scale === "major" && (
-                    <label className="check-label">
-                      <input
-                        type="checkbox"
-                        checked={sevenths}
-                        onChange={(e) => {
-                          stop();
-                          setSevenths(e.target.checked);
-                          setOverlay(-1);
-                        }}
-                      />
-                      七の和音
-                    </label>
-                  )}
-                </div>
-                {state.scale === "major" ? (
-                  <>
-                    <div className="harmonies">
-                      {harmonies.map((h, i) => (
-                        <button
-                          key={i}
-                          className={overlay === i ? "selected" : ""}
-                          onClick={() => {
-                            stop();
-                            setOverlay(overlay === i ? -1 : i);
-                          }}
-                        >
-                          <small>
-                            {["I", "II", "III", "IV", "V", "VI", "VII"][i]}
-                          </small>
-                          <strong>
-                            {h.root}
-                            {suffix[h.formula.id]}
-                          </strong>
-                        </button>
-                      ))}
-                    </div>
-                    <p className="muted">
-                      コードを選ぶと、指板の色はそのコードのルート基準になります。構成音一覧ではスケールの度数も確認できます。
-                    </p>
-                    {overlayChord && (
-                      <button onClick={() => play(overlayTones, true)}>
-                        ▶ {overlayChord.root}
-                        {suffix[overlayChord.formula.id]} を聴く
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <p className="muted">
-                    ダイアトニックコードの一覧はメジャースケールで表示します。
-                  </p>
-                )}
-                <div className="compatibility">
-                  <strong>
-                    {state.root}
-                    {suffix[state.chord]} と照合
-                  </strong>
-                  <span>
-                    {tones(state.root, chord.degrees).every((t) =>
-                      scaleTones.some((s) => mod(s.midi) === mod(t.midi)),
-                    )
-                      ? "すべての構成音が、このスケールに含まれます。"
-                      : `スケール外の音：${tones(state.root, chord.degrees)
-                          .filter(
-                            (t) =>
-                              !scaleTones.some(
-                                (s) => mod(s.midi) === mod(t.midi),
-                              ),
-                          )
-                          .map((t) => t.name)
-                          .join("・")}`}
-                  </span>
-                  <select
-                    aria-label="照合するコード"
-                    value={state.chord}
-                    onChange={(e) =>
-                      patch({ chord: e.target.value, inversion: 0 })
-                    }
-                  >
-                    {chords.map((c) => (
-                      <option value={c.id} key={c.id}>
-                        {state.root}
-                        {suffix[c.id] || " major"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <p className="aside-note">
-                  音が含まれることは、あらゆる場面でその組み合わせが適することを意味しません。
-                </p>
-              </section>
+              <>
+                <ScaleComparison
+                  state={state}
+                  patch={patch}
+                  play={play}
+                  onPlay={playOne}
+                  active={active}
+                  colored={colored}
+                  names={names}
+                  degrees={degrees}
+                  solfege={solfege}
+                />
+                <ScaleHarmony
+                  root={state.root}
+                  chord={chord}
+                  scaleTones={scaleTones}
+                  harmonies={harmonies}
+                  overlay={overlay}
+                  sevenths={sevenths}
+                  melodicDescent={
+                    scale.id === "melodic" && state.classic && descending
+                  }
+                  onOverlay={(harmony) => patch({ harmony })}
+                  onSevenths={(sevenths) => patch({ sevenths, harmony: 7 })}
+                  onChord={(chord) => patch({ chord, inversion: 0 })}
+                  play={play}
+                />
+              </>
             )}
             <section className="explanation">
               <span className="explanation-icon">↳</span>
@@ -885,6 +815,23 @@ export default function App() {
                       ? scale.description
                       : "ギターでは、同じ高さの音を複数の弦で弾けます。濃い輪郭の音と同じ高さの場所を探し、オクターブ違いの音とも聴き比べてみましょう。指板の小さな点もクリックすると音が鳴ります。"}
                 </p>
+                {state.mode === "scales" && parent && parentLinkRoot && (
+                  <p className="parent-scale">
+                    親メジャースケール：
+                    <a
+                      href={`#${stateHash({ ...state, root: parentLinkRoot, scale: "major", harmony: 7, compareScale: "", descending: false })}`}
+                    >
+                      {parent} メジャー
+                      {parent !== parentLinkRoot
+                        ? `（同じ音高の${parentLinkRoot}で表示）`
+                        : ""}{" "}
+                      ↗
+                    </a>
+                    {scale.id === "major"
+                      ? "。イオニアンとメジャーは同じ音階です。"
+                      : `。親メジャースケールの第${scale.modeDegree}音を主音にしたモードです。構成音が同じでも主音が異なります。`}
+                  </p>
+                )}
                 {state.mode === "scales" && (
                   <div className="intervals">
                     {[...displayedScale.degrees, "8"]

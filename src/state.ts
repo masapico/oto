@@ -10,6 +10,10 @@ export type State = {
   inversion: number;
   classic: boolean;
   pitch: number;
+  compareScale: string;
+  descending: boolean;
+  harmony: number;
+  sevenths: boolean;
 };
 export function readState(hash = location.hash): State {
   const p = new URLSearchParams(hash.replace(/^#\/?/, ""));
@@ -28,6 +32,10 @@ export function readState(hash = location.hash): State {
     root: roots.includes(p.get("root") || "") ? p.get("root")! : "C",
     chord: chord.id,
     scale: scales.find((s) => s.id === p.get("scale"))?.id || "major",
+    compareScale: scales.find((s) => s.id === p.get("compare"))?.id || "",
+    descending: p.get("direction") === "down",
+    harmony: p.get("harmony") ? numeric("harmony", 7, 6) : 7,
+    sevenths: p.get("sevenths") !== "0",
     start,
     end,
     inversion: Math.min(numeric("inv", 0, 3), chord.degrees.length - 1),
@@ -46,5 +54,9 @@ export function stateHash(s: State) {
     inv: String(s.inversion),
     melodic: s.classic ? "classic" : "jazz",
     pitch: String(s.pitch),
+    compare: s.compareScale,
+    direction: s.descending ? "down" : "up",
+    harmony: s.harmony < 7 ? String(s.harmony) : "",
+    sevenths: s.sevenths ? "1" : "0",
   }).toString();
 }
