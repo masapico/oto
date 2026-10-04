@@ -31,16 +31,6 @@ npm run dev
 
 記録、ログイン、ブラウザへの永続保存、外部APIは使用しません。音はWeb Audioの合成音です。再生ボタンを押すと音声が有効になります。録音や実際のギター演奏の判定は行いません。
 
-## GitHub Pagesへの公開
-
-`.github/workflows/pages.yml` は `main` へのpush、または手動実行でテスト・ビルド・公開します。
-
-1. GitHubリポジトリの **Settings → Pages → Source** を **GitHub Actions** に設定します。
-2. この実装を `main` にpushします。
-3. Actionsの **Deploy guitar reference** が成功すると公開されます。
-
-このリポジトリの標準URLは `https://masapico.github.io/ideas/` です。相対アセットパスとハッシュURLを使うため、サブディレクトリと直接リンクの再読み込みに対応します。公開URLが有効になるのはデプロイ完了後です。
-
 ## 構成と追加方法
 
 - `src/music.ts`: 音程、音名の綴り、実音、構成音、スケール、転回形の純粋関数。新しい種類は `chords` / `scales` の定義に追加します。スケールは `group` で選択肢の分類を指定し、メジャー系モードには `modeDegree`（親メジャーの何番目の音が主音か）を設定します。コードの記号は `chordSuffix` に追加します。7音スケールを追加する場合は、3度積みで生じる和音の定義も必要です。
