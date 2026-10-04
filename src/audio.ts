@@ -1,43 +1,30 @@
+import {
+  noteDuration,
+  renderWave,
+  stringSamples,
+  usesMediaPlayback,
+} from "./audio-render";
+
 export class Player {
   private context?: AudioContext;
   private voices: AudioBufferSourceNode[] = [];
   private samples = new Map<number, AudioBuffer>();
   private timers: ReturnType<typeof setTimeout>[] = [];
   private generation = 0;
+  private media?: HTMLAudioElement;
+  private mediaUrl?: string;
+  private mediaSamples = new Map<number, Float32Array>();
   // A plucked string: bright attack, faster decay of upper harmonics,
   // and a stable fundamental so chord tones stay easy to identify.
   private stringSample(ctx: AudioContext, midi: number) {
     const cached = this.samples.get(midi);
     if (cached) return cached;
-    const frequency = 440 * 2 ** ((midi - 69) / 12);
     const buffer = ctx.createBuffer(
       1,
       Math.ceil(ctx.sampleRate * 3.2),
       ctx.sampleRate,
     );
-    const data = buffer.getChannelData(0);
-    const harmonics = Math.min(
-      12,
-      Math.floor((ctx.sampleRate * 0.45) / frequency),
-    );
-    for (let h = 1; h <= harmonics; h++) {
-      const strength = h === 1 ? 1 : Math.sin(h * Math.PI * 0.22) / (h * 1.5);
-      const decay = 1.15 + h * 0.55;
-      for (let i = 0; i < data.length; i++) {
-        const t = i / ctx.sampleRate;
-        data[i] +=
-          strength *
-          Math.sin(2 * Math.PI * frequency * h * t) *
-          Math.exp(-decay * t);
-      }
-    }
-    let peak = 0;
-    for (let i = 0; i < data.length; i++)
-      peak = Math.max(peak, Math.abs(data[i]));
-    for (let i = 0; i < data.length; i++) {
-      const t = i / ctx.sampleRate;
-      data[i] = (data[i] / Math.max(1, peak)) * Math.min(1, t / 0.003);
-    }
+    buffer.copyToChannel(stringSamples(midi, ctx.sampleRate), 0);
     this.samples.set(midi, buffer);
     return buffer;
   }
@@ -45,6 +32,16 @@ export class Player {
     this.generation++;
     this.timers.forEach(clearTimeout);
     this.timers = [];
+    if (this.media) {
+      this.media.onended = null;
+      this.media.pause();
+      this.media.removeAttribute("src");
+      this.media.load();
+    }
+    if (this.mediaUrl) {
+      URL.revokeObjectURL(this.mediaUrl);
+      this.mediaUrl = undefined;
+    }
     this.voices.forEach((v) => {
       try {
         v.stop();
@@ -77,6 +74,46 @@ export class Player {
         // Unsupported session settings must not prevent normal Web Audio.
       }
     }
+    if (usesMediaPlayback(navigator.userAgent)) {
+      const wave = renderWave(groups, bpm, volume, this.mediaSamples);
+      const media = (this.media ??= new Audio());
+      this.mediaUrl = URL.createObjectURL(
+        new Blob([wave], { type: "audio/wav" }),
+      );
+      media.src = this.mediaUrl;
+      media.onended = () => {
+        if (generation !== this.generation) return;
+        this.stop();
+        onActive([]);
+        onEnd();
+      };
+      // Call play synchronously in the click handler: Safari's media playback
+      // permission must be acquired before any await or timer.
+      try {
+        await media.play();
+      } catch (error) {
+        if (generation !== this.generation) return;
+        this.stop();
+        throw error;
+      }
+      if (generation !== this.generation) return;
+      let activeGroup = -1;
+      const update = () => {
+        if (generation !== this.generation) return;
+        const index = Math.min(
+          groups.length - 1,
+          Math.floor(media.currentTime / (60 / bpm)),
+        );
+        if (index !== activeGroup) {
+          activeGroup = index;
+          onActive(groups[index] ?? []);
+        }
+        // Follow the media clock so buffering cannot make highlights run ahead.
+        this.timers = [setTimeout(update, 30)];
+      };
+      update();
+      return;
+    }
     if (!this.context || this.context.state === "closed") {
       this.context = new AudioContext();
       this.samples.clear();
@@ -98,8 +135,7 @@ export class Player {
         osc.buffer = this.stringSample(ctx, midi);
         const gain = ctx.createGain();
         const at = start + i * step + voice * 0.014;
-        const duration =
-          groups.length === 1 ? (group.length > 1 ? 2.8 : 2) : step * 0.92;
+        const duration = noteDuration(groups, group, step);
         const level = (volume * 0.65) / Math.max(1, group.length);
         gain.gain.setValueAtTime(level, at);
         gain.gain.setValueAtTime(level, at + Math.max(0, duration - 0.06));

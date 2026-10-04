@@ -93,11 +93,26 @@ export default function App() {
     };
   }, [stop]);
   useEffect(() => {
-    history.replaceState(
-      null,
-      "",
-      `${location.pathname}${location.search}#${stateHash(state)}`,
-    );
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    const update = () => {
+      try {
+        history.replaceState(
+          null,
+          "",
+          `${location.pathname}${location.search}#${stateHash(state)}`,
+        );
+      } catch (error) {
+        // Safari rate-limits history updates during rapid note/chord changes.
+        // Keep the tool usable and retry only the latest bookmark state.
+        if (error instanceof DOMException && error.name === "SecurityError") {
+          retry = setTimeout(update, 1000);
+        } else {
+          throw error;
+        }
+      }
+    };
+    update();
+    return () => clearTimeout(retry);
   }, [state]);
   useEffect(() => {
     const hide = () => {
@@ -128,6 +143,7 @@ export default function App() {
           () => setPlaying(false),
         )
         .catch(() => {
+          setActive([]);
           setPlaying(false);
           setError(
             "音を開始できませんでした。もう一度、再生ボタンを押してください。",

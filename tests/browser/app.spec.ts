@@ -71,6 +71,10 @@ test("actual audio output, stop, alternate pitches, and melodic descent", async 
   page,
 }) => {
   await page.addInitScript(() => {
+    // This test measures the Web Audio backend; media playback has its own tests.
+    Object.defineProperty(navigator, "userAgent", {
+      value: "Chrome/140 AppleWebKit/537.36",
+    });
     const Native = window.AudioContext;
     const meters: AnalyserNode[] = [];
     (window as unknown as { meters: AnalyserNode[] }).meters = meters;
@@ -178,6 +182,9 @@ test("guitar chord has staggered attacks, pitched string samples and audible sus
   page,
 }) => {
   await page.addInitScript(() => {
+    Object.defineProperty(navigator, "userAgent", {
+      value: "Chrome/140 AppleWebKit/537.36",
+    });
     const Native = window.AudioContext;
     const sources: { buffer: AudioBufferSourceNode; at: number }[] = [];
     (window as unknown as { stringSources: typeof sources }).stringSources =
@@ -196,6 +203,9 @@ test("guitar chord has staggered attacks, pitched string samples and audible sus
   });
   await page.goto("./#view=chords&root=C&chord=maj");
   await page.getByRole("button", { name: "▶ 和音で聴く" }).click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).stringSources.length))
+    .toBe(3);
   const sound = await page.evaluate(() => {
     const sources = (
       window as unknown as {
@@ -368,6 +378,13 @@ test("expanded modes and harmonies render with accidentals and mobile comparison
       }
     }
   }
+  await expect.poll(() => page.url(), { timeout: 15000 }).toContain("root=B");
+  await expect
+    .poll(() => page.url(), { timeout: 15000 })
+    .toContain("scale=melodic");
+  await expect
+    .poll(() => page.url(), { timeout: 15000 })
+    .toContain("harmony=6");
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("./#view=scales&root=C&scale=dorian&compare=natural");
   await expect(page.locator(".comparison-card")).toHaveCount(2);

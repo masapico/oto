@@ -8,6 +8,10 @@ for (const view of ["notes", "chords", "scales", "quiz"]) {
     page,
   }) => {
     await page.addInitScript(() => {
+      // Exercise the Web Audio backend independently of the host browser.
+      Object.defineProperty(navigator, "userAgent", {
+        value: "Chrome/140 AppleWebKit/537.36",
+      });
       const session = { type: "auto" };
       Object.defineProperty(navigator, "audioSession", {
         configurable: true,
@@ -90,6 +94,9 @@ test("a rejected audio session setting still allows Web Audio playback", async (
   page,
 }) => {
   await page.addInitScript(() => {
+    Object.defineProperty(navigator, "userAgent", {
+      value: "Chrome/140 AppleWebKit/537.36",
+    });
     Object.defineProperty(navigator, "audioSession", {
       value: {
         set type(_value: string) {
