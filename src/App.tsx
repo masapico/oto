@@ -237,6 +237,13 @@ export default function App() {
           <span className="status-dot" /> SEE. HEAR. UNDERSTAND.
         </span>
       </header>
+      <nav className="site-nav" aria-label="サイト全体">
+        <a href={`${import.meta.env.BASE_URL}guides/`}>学習ガイド</a>
+        <a href={import.meta.env.BASE_URL} aria-current="page">
+          リファレンス
+        </a>
+        <a href={`${import.meta.env.BASE_URL}about/`}>このサイトについて</a>
+      </nav>
       <nav className="tabs" aria-label="リファレンスの種類">
         {tabs.map((t) => (
           <button
@@ -255,6 +262,12 @@ export default function App() {
         ))}
       </nav>
       <main>
+        <aside className="guide-entry" aria-label="はじめての方へ">
+          <p>使い方に迷ったら、音名・コード・スケールの解説から。</p>
+          <a href={`${import.meta.env.BASE_URL}guides/`}>
+            14の学習ガイドを読む →
+          </a>
+        </aside>
         <div className="page-heading">
           <div>
             <p className="eyebrow">THE INTERACTIVE GUITAR COMPANION</p>
@@ -904,17 +917,23 @@ export default function App() {
         </section>
         {error && <p role="alert">{error}</p>}
       </main>
-      <footer>
+      <footer className="site-footer">
         <span className="footer-logo">
           oto<span> / GUITAR REFERENCE</span>
         </span>
-        <a
-          href="https://github.com/masapico/ideas"
-          target="_blank"
-          rel="noreferrer"
-        >
-          SOURCE ↗
-        </a>
+        <nav aria-label="運営情報">
+          <a href={`${import.meta.env.BASE_URL}about/`}>運営・編集方針</a>
+          <a href={`${import.meta.env.BASE_URL}contact/`}>お問い合わせ</a>
+          <a href={`${import.meta.env.BASE_URL}privacy/`}>プライバシー</a>
+          <a href={`${import.meta.env.BASE_URL}terms/`}>利用条件</a>
+          <a
+            href="https://github.com/masapico/oto"
+            target="_blank"
+            rel="noreferrer"
+          >
+            SOURCE ↗
+          </a>
+        </nav>
       </footer>
     </div>
   );

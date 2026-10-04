@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 const webkit = process.env.BROWSER_ENGINE === "webkit";
 const production = process.env.PRODUCTION === "1";
-const baseURL = "http://127.0.0.1:5173" + (production ? "/ideas/" : "/");
+const baseURL = "http://127.0.0.1:5173/oto/";
 export default defineConfig({
   testDir: "tests/browser",
   use: {
@@ -20,7 +20,7 @@ export default defineConfig({
   },
   webServer: {
     command: production
-      ? "npm run preview -- --port 5173 --base /ideas/"
+      ? "npm run preview -- --port 5173"
       : "npm run dev -- --port 5173",
     url: baseURL,
     reuseExistingServer: !process.env.CI,
